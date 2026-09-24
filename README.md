@@ -14,6 +14,7 @@ Options: `--chart ./path/to/otel-integration` renders a local chart checkout. `-
 ## What you get
 
 - **Tabs for comparing.** Each tab has its own `values.yaml`, chart version, render and graph position. **Duplicate** a tab and pick another chart version to compare releases, or open several values files (each file opens in its own tab). Double-click a tab to rename it. Tabs are saved in your browser's local storage.
+- **Compare** diffs this tab against another tab (other → this). **Summary** lists added, removed and changed pipelines and components, including processor order changes and new or fixed problems; each changed component has an inline YAML diff. **Rendered config** is a unified diff of the effective collector config, so preset changes between chart versions show up. **values.yaml** diffs the inputs. **⇄ Swap** flips the direction.
 - **One tab per collector** (agent DaemonSet, cluster-collector Deployment, gateway, and so on), with error and warning badges.
 - **One pan/zoom graph** (like otelbin). Each pipeline is a lane, grouped by signal: receivers → numbered processor chain → exporters. Connectors (`spanmetrics`, `forward/*`) are dashed. A pipeline fed by a connector starts to the right of the pipeline exporting to it, so everything flows left to right and nothing loops back. Drag to pan and scroll to zoom. **Fit** shows the whole graph. Hovering a component highlights it and its edges in every pipeline.
 - **Provenance colouring.** The chart is rendered a second time with every `config:` block removed. Comparing the two renders tags each component as a *chart preset*, *your values* or *overridden*. This makes it obvious when presets add processors (for example `k8sattributes` and `batch`) around the ones you listed.
@@ -36,6 +37,7 @@ cxviz/analyze.py     graph model, provenance, lint
 cxviz/service.py     end-to-end pipeline
 static/graph.js      single-canvas lane layout, edges, pan/zoom
 static/workspace.js  tabs: per-tab values/version/render, persistence, file loading
+static/compare.js    tab-vs-tab structural and line diffs (jsdiff from cdnjs, with SRI)
 static/              UI (CodeMirror from cdnjs with SRI; falls back to a textarea offline)
 tests/               python3 -m pytest
 ```

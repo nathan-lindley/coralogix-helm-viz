@@ -127,10 +127,11 @@ function setStatus(text, isError = false, tab = state) {
   status.classList.toggle("error", isError);
 }
 
-async function renderNow() {
-  const tab = state;   // results land in this tab even if the user switches away
+/** Render a tab (the active one by default). Results land in that tab even if the user switches away. */
+async function renderNow(tab = state) {
+  if (!(tab && typeof tab === "object" && "values" in tab)) tab = state;   // called as an event handler
   clearTimeout(tab.liveTimer);
-  tab.values = editor.get();
+  if (tab === state) tab.values = editor.get();
   saveWorkspace();
   if (!tab.values.trim()) return;
   const token = Symbol("render");
@@ -154,6 +155,7 @@ async function renderNow() {
   }
   renderTabBar();
   if (tab === state) { renderNotices(); renderAll(); }
+  else if (state.view === "compare") renderView();   // the comparison target just finished
 }
 
 function scheduleLive() {
@@ -248,12 +250,13 @@ function renderSummary() {
 }
 
 function renderView() {
-  for (const v of ["graph", "problems", "yaml"]) $(`#view-${v}`).hidden = state.view !== v || !currentCollector();
+  for (const v of ["graph", "problems", "yaml", "compare"]) $(`#view-${v}`).hidden = state.view !== v || !currentCollector();
   document.querySelectorAll(".view-switch button").forEach((b) => b.classList.toggle("active", b.dataset.view === state.view));
   if (!currentCollector()) return;
   if (state.view === "graph") renderGraph();
   if (state.view === "problems") renderProblems();
   if (state.view === "yaml") renderYaml();
+  if (state.view === "compare") renderCompare();
 }
 
 /* ------------------------------------------------------------------ graph */
