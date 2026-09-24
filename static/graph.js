@@ -11,9 +11,8 @@
  */
 const PipelineGraph = (() => {
   const L = {
-    nodeH: 24, vGap: 6, procGap: 30, colGap: 56, gridGap: 12,
+    nodeH: 24, vGap: 6, procGap: 30, colGap: 56,
     lanePad: 10, laneHeader: 24, rowGap: 12,
-    maxStack: 4,   // receivers/exporters wrap into another column beyond this
     charW: 7.25, nodePadX: 22, stepW: 16, minW: 96, maxW: 340,
     laneHGap: 90,
   };
@@ -48,32 +47,26 @@ const PipelineGraph = (() => {
   }
 
   /**
-   * Place items in a column-major grid of at most L.maxStack rows, vertically
-   * centred in the lane content. Returns the nodes and the grid's width.
+   * Stack items in a single column, vertically centred in the lane content.
+   * Receivers/exporters are parallel inputs/outputs, so they must never be laid
+   * out side by side — that reads as one feeding the next.
    */
-  function grid(items, kind, x0, top, contentH, colW) {
-    const rows = Math.min(Math.max(items.length, 1), L.maxStack);
-    const cols = Math.ceil(items.length / rows);
-    const y = stackY(rows, top, contentH);
-    const nodes = items.map((item, i) => ({
-      item, kind, x: x0 + Math.floor(i / rows) * (colW + L.gridGap), y: y(i % rows), w: colW,
-    }));
-    return { nodes, width: cols ? cols * colW + (cols - 1) * L.gridGap : 0 };
+  function column(items, kind, x, top, contentH, colW) {
+    const y = stackY(items.length, top, contentH);
+    return items.map((item, i) => ({ item, kind, x, y: y(i), w: colW }));
   }
 
   /** Lane geometry with the lane's own top-left at (0, 0). */
   function laneGeometry(p) {
-    const stacked = (n) => Math.min(Math.max(n, 1), L.maxStack);
-    const rows = Math.max(stacked(p.receivers.length), stacked(p.exporters.length));
+    const rows = Math.max(p.receivers.length, p.exporters.length, 1);
     const contentH = rows * L.nodeH + (rows - 1) * L.vGap;
     const top = L.laneHeader;
     const midY = top + contentH / 2 - L.nodeH / 2;
 
     const recvW = Math.max(L.minW, ...p.receivers.map((r) => nodeWidth(r.id)));
-    const recv = grid(p.receivers, "receivers", L.lanePad, top, contentH, recvW);
-    const nodes = [...recv.nodes];
+    const nodes = column(p.receivers, "receivers", L.lanePad, top, contentH, recvW);
 
-    let x = L.lanePad + Math.max(recv.width, L.minW) + L.colGap;
+    let x = L.lanePad + recvW + L.colGap;
     p.processors.forEach((item, i) => {
       const w = nodeWidth(item.id, true);
       nodes.push({ item, kind: "processors", step: i + 1, x, y: midY, w });
@@ -81,10 +74,9 @@ const PipelineGraph = (() => {
     });
     const expX = p.processors.length ? x - L.procGap + L.colGap : x;
     const expW = Math.max(L.minW, ...p.exporters.map((e) => nodeWidth(e.id)));
-    const exp = grid(p.exporters, "exporters", expX, top, contentH, expW);
-    nodes.push(...exp.nodes);
+    nodes.push(...column(p.exporters, "exporters", expX, top, contentH, expW));
 
-    return { nodes, w: expX + Math.max(exp.width, L.minW) + L.lanePad, h: L.laneHeader + contentH + L.lanePad };
+    return { nodes, w: expX + expW + L.lanePad, h: L.laneHeader + contentH + L.lanePad };
   }
 
   /**
