@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Coralogix Helm Viz</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css" integrity="sha384-zaeBlB/vwYsDRSlFajnDd7OydJ0cWk+c2OWybl3eSUf6hW2EbhlCsQPqKr3gkznT" crossorigin="anonymous" referrerpolicy="no-referrer">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">◈</span>
+      <span>Coralogix Helm Viz</span>
+      <span class="muted">otel-integration</span>
+    </div>
+    <div class="controls">
+      <label class="field">Chart
+        <select id="version"></select>
+      </label>
+      <button id="load-example" class="ghost" type="button">Example</button>
+      <label class="ghost button" for="file-input">Open file…</label>
+      <input id="file-input" type="file" accept=".yaml,.yml,.txt" hidden>
+      <label class="toggle"><input id="auto" type="checkbox" checked> Live</label>
+      <button id="render" class="primary" type="button" title="Cmd/Ctrl + Enter">Render</button>
+      <span id="status" class="status" role="status" aria-live="polite"></span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="editor-pane" aria-label="values.yaml">
+      <div class="pane-title">values.yaml <span class="muted">— paste, drop or open a file</span></div>
+      <div id="editor-host" class="editor-host">
+        <textarea id="editor" spellcheck="false"></textarea>
+      </div>
+      <div id="notices" class="notices"></div>
+    </section>
+
+    <div class="splitter" id="splitter" role="separator" aria-orientation="vertical" tabindex="0"></div>
+
+    <section class="viz-pane" aria-label="Visualisation">
+      <nav id="collector-tabs" class="tabs" role="tablist"></nav>
+      <div class="viz-toolbar">
+        <div id="signal-filters" class="chips" role="group" aria-label="Signals"></div>
+        <div class="view-switch" role="tablist">
+          <button data-view="graph" class="active" type="button">Pipelines</button>
+          <button data-view="problems" type="button">Problems <span id="problem-count" class="count"></span></button>
+          <button data-view="yaml" type="button">Rendered config</button>
+        </div>
+        <div class="legend">
+          <span class="swatch origin-chart"></span>chart preset
+          <span class="swatch origin-user"></span>your values
+          <span class="swatch origin-override"></span>overridden
+          <span class="swatch connector"></span>connector
+        </div>
+      </div>
+      <div id="summary" class="summary"></div>
+      <div id="view-graph" class="view"></div>
+      <div id="view-problems" class="view" hidden></div>
+      <div id="view-yaml" class="view" hidden>
+        <div class="yaml-actions">
+          <button id="copy-yaml" class="ghost" type="button">Copy</button>
+          <button id="download-yaml" class="ghost" type="button">Download</button>
+        </div>
+        <pre id="rendered-yaml" class="code"></pre>
+      </div>
+      <div id="empty" class="empty">Render a values file to see the collector pipelines.</div>
+    </section>
+
+    <aside id="drawer" class="drawer" hidden aria-label="Component details">
+      <div class="drawer-head">
+        <div>
+          <div id="drawer-kind" class="muted small"></div>
+          <h2 id="drawer-title"></h2>
+        </div>
+        <button id="drawer-close" class="ghost" type="button" aria-label="Close">✕</button>
+      </div>
+      <div id="drawer-meta" class="drawer-meta"></div>
+      <pre id="drawer-yaml" class="code"></pre>
+    </aside>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js" integrity="sha384-ZYmwuq4n2gOcNxMSiJ6jyTj+BbIrilr7p6dlq6q5nmSWKmsH9UU4K1qqjycMkfmR" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/yaml/yaml.min.js" integrity="sha384-9q49Jm3hZMwxEMLImsxPxLiaptHpFz1PVa26Dg6SVIO+rj5kx0cgOM2+4ikKJFH9" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="graph.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
