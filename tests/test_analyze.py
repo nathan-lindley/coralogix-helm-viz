@@ -106,3 +106,20 @@ def test_strip_config_overrides_keeps_presets_and_does_not_mutate():
     out = strip_config_overrides(values)
     assert out == {"global": {"domain": "x"}, "opentelemetry-agent": {"presets": {"a": 1}}}
     assert "config" in values["opentelemetry-agent"]
+
+
+def test_pipeline_order_follows_chart_defaults_then_user_then_rendered():
+    rendered = cfg()
+    rendered["service"]["pipelines"] = {
+        name: {"receivers": ["otlp"], "processors": [], "exporters": ["coralogix"]}
+        for name in ["logs", "metrics", "profiles", "traces", "traces/lvt", "traces/db"]
+    }
+    chart_pipelines = ["metrics", "traces", "logs"]
+    user_values = {"opentelemetry-agent": {"config": {"service": {"pipelines": {
+        "traces/lvt": {}, "traces/db": {}, "logs": {}}}}}}
+    model = build_model(
+        RenderedCollector("opentelemetry-agent", "agent", "DaemonSet", rendered, ""),
+        user_values, None, chart_pipelines)
+    order = {p["id"]: p["order"] for p in model["pipelines"]}
+    assert sorted(order, key=order.get) == [
+        "metrics", "traces", "logs", "traces/lvt", "traces/db", "profiles"]

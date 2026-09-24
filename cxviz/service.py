@@ -2,7 +2,7 @@
 
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import yaml
 
@@ -33,6 +33,23 @@ def _parse_values(text: str) -> Dict[str, Any]:
     return values
 
 
+def chart_default_pipelines(chart_path: Path) -> Dict[str, List[str]]:
+    """alias -> pipeline ids in the order the chart's own values.yaml lists them."""
+    try:
+        defaults = yaml.safe_load((chart_path / "values.yaml").read_text()) or {}
+    except (OSError, yaml.YAMLError):
+        return {}
+    out: Dict[str, List[str]] = {}
+    for alias, section in defaults.items():
+        if not isinstance(section, dict):
+            continue
+        service = (section.get("config") or {}).get("service") or {}
+        pipelines = service.get("pipelines") if isinstance(service, dict) else None
+        if isinstance(pipelines, dict):
+            out[alias] = list(pipelines)
+    return out
+
+
 def analyse(values_text: str, chart_path: Path,
             renderer: Callable[[Path, str], str] = helm.render) -> Dict[str, Any]:
     if len(values_text.encode()) > MAX_VALUES_BYTES:
@@ -53,8 +70,9 @@ def analyse(values_text: str, chart_path: Path,
     baseline_by_alias = {
         c.alias: c for c in (extract_collectors(baseline_manifest) if baseline_manifest else [])
     }
+    chart_order = chart_default_pipelines(chart_path)
     collectors = [
-        build_model(c, values, baseline_by_alias.get(c.alias))
+        build_model(c, values, baseline_by_alias.get(c.alias), chart_order.get(c.alias))
         for c in extract_collectors(manifest)
     ]
     return {

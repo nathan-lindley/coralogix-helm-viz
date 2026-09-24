@@ -124,6 +124,36 @@ const PipelineGraph = (() => {
   }
 
   /**
+   * Vertical order that follows the config instead of Helm's alphabetical map
+   * order: walk depth-first from each root lane (roots in config order — chart
+   * defaults, then the values file), visiting the lanes each pipeline feeds in
+   * the order of its `exporters` list. Lanes fed by the same pipeline therefore
+   * stack in the same order as the edges leaving it.
+   */
+  function rankLanes(entries, upstream) {
+    const configOrder = (e) => (e.p.order !== undefined ? e.p.order : e.index);
+    const byConfig = [...entries].sort((a, b) => configOrder(a) - configOrder(b));
+    const consumersOf = {};   // connector id -> lanes receiving from it, config order
+    for (const e of byConfig) {
+      for (const r of e.p.receivers) if (r.connector) (consumersOf[r.id] = consumersOf[r.id] || []).push(e);
+    }
+    const seen = new Set();
+    const ordered = [];
+    const visit = (e) => {
+      if (seen.has(e.p.id)) return;
+      seen.add(e.p.id);
+      ordered.push(e);
+      for (const x of e.p.exporters) {
+        if (!x.connector) continue;
+        for (const c of consumersOf[x.id] || []) if (c.p.id !== e.p.id) visit(c);
+      }
+    };
+    byConfig.filter((e) => upstream[e.p.id].size === 0).forEach(visit);
+    byConfig.forEach(visit);   // anything left (cycles) in config order
+    return ordered;
+  }
+
+  /**
    * Lanes are placed so data only ever flows left-to-right: a pipeline fed by a
    * connector starts to the right of every pipeline that exports to it. Lanes
    * that don't overlap horizontally share a row to keep the graph compact.
@@ -139,25 +169,37 @@ const PipelineGraph = (() => {
       place[id] = { x, depth };
     }
 
+    const ordered = rankLanes([...byId.values()], upstream);
+
     // First-fit row packing: a lane joins the first row where it doesn't
     // overlap horizontally. x never changes, so flow stays left-to-right.
-    const ordered = [...byId.values()].sort((a, b) =>
-      place[a.p.id].depth - place[b.p.id].depth || a.index - b.index);
+    // A lane must sit below every earlier-ranked lane that shares one of its
+    // feeders, so links leaving a pipeline fan out in exporter order and never cross.
     const rows = [];
+    const lastChildRow = {};   // feeder id -> lowest row used by its lanes so far
     for (const entry of ordered) {
-      const x = place[entry.p.id].x;
+      const { x } = place[entry.p.id];
       const span = [x, x + entry.geo.w];
+      const feeders = [...upstream[entry.p.id]];
       const fits = (row) => row.spans.every(([l, r]) => span[0] >= r + L.laneHGap || span[1] + L.laneHGap <= l);
-      let row = rows.find(fits);
-      if (!row) { row = { spans: [], entries: [], h: 0 }; rows.push(row); }
+      const minRow = Math.max(0, ...feeders.map((f) => (f in lastChildRow ? lastChildRow[f] + 1 : 0)));
+      let index = rows.findIndex((row, i) => i >= minRow && fits(row));
+      if (index < 0) {
+        while (rows.length < minRow) rows.push({ spans: [], entries: [], h: 0 });
+        rows.push({ spans: [], entries: [], h: 0 });
+        index = rows.length - 1;
+      }
+      const row = rows[index];
       row.spans.push(span);
       row.entries.push(entry);
       row.h = Math.max(row.h, entry.geo.h);
+      for (const f of feeders) lastChildRow[f] = Math.max(lastChildRow[f] ?? -1, index);
     }
+    const nonEmpty = rows.filter((r) => r.entries.length);
 
     const lanes = [];
     let y = 0;
-    for (const row of rows) {
+    for (const row of nonEmpty) {
       for (const { p, geo } of row.entries) {
         const { x } = place[p.id];
         const nodes = geo.nodes.map((n) => ({ ...n, x: n.x + x, y: n.y + y }));

@@ -186,8 +186,23 @@ def lint(config: Dict[str, Any]) -> List[Dict[str, Any]]:
     return sorted(findings, key=lambda f: order[f["level"]])
 
 
+def _pipeline_order(rendered_ids: List[str], chart_pipelines: List[str],
+                    user_pipelines: List[str]) -> Dict[str, int]:
+    """Config order for pipelines: chart defaults, then the values file, then the rest.
+
+    Helm renders maps with sorted keys, so the rendered order is alphabetical;
+    this recovers the order people actually wrote the pipelines in.
+    """
+    ordered: List[str] = []
+    for pid in [*chart_pipelines, *user_pipelines, *rendered_ids]:
+        if pid in rendered_ids and pid not in ordered:
+            ordered.append(pid)
+    return {pid: i for i, pid in enumerate(ordered)}
+
+
 def build_model(collector: RenderedCollector, user_values: Dict[str, Any],
-                baseline: Optional[RenderedCollector]) -> Dict[str, Any]:
+                baseline: Optional[RenderedCollector],
+                chart_pipelines: Optional[List[str]] = None) -> Dict[str, Any]:
     config = collector.config
     user_cfg = _user_config(user_values, collector.alias)
     baseline_cfg = baseline.config if baseline else {}
@@ -197,11 +212,14 @@ def build_model(collector: RenderedCollector, user_values: Dict[str, Any],
     enabled_ext = list(((config.get("service") or {}).get("extensions")) or [])
     for ext_id, entry in components["extensions"].items():
         entry["enabled"] = ext_id in enabled_ext
+    order = _pipeline_order(list(pipelines), chart_pipelines or [], list(_pipelines(user_cfg)))
+    pipeline_model = [{**p, "order": order[p["id"]]}
+                      for p in _pipeline_model(pipelines, user_cfg, baseline_cfg, _keys(config.get("connectors")))]
     return {
         "id": collector.alias,
         "name": collector.name,
         "workload": collector.workload,
-        "pipelines": _pipeline_model(pipelines, user_cfg, baseline_cfg, _keys(config.get("connectors"))),
+        "pipelines": pipeline_model,
         "components": components,
         "extensions": enabled_ext,
         "warnings": lint(config),

@@ -43,3 +43,12 @@ def test_invalid_yaml_reports_line():
 def test_non_mapping_rejected():
     with pytest.raises(InputError, match="mapping"):
         analyse("- a\n", Path("."), renderer=fake_renderer)
+
+
+def test_chart_default_pipelines_reads_order(tmp_path):
+    from cxviz.service import chart_default_pipelines
+    (tmp_path / "values.yaml").write_text(
+        "opentelemetry-agent:\n  config:\n    service:\n      pipelines:\n"
+        "        metrics: {}\n        traces: {}\n        logs: {}\nglobal: {domain: x}\n")
+    assert chart_default_pipelines(tmp_path) == {"opentelemetry-agent": ["metrics", "traces", "logs"]}
+    assert chart_default_pipelines(tmp_path / "missing") == {}
