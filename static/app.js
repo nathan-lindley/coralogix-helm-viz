@@ -3,7 +3,6 @@
 /* ------------------------------------------------------------------ constants */
 const SIGNALS = ["traces", "metrics", "logs", "profiles"];
 const SIGNAL_COLOR = { traces: "var(--sig-traces)", metrics: "var(--sig-metrics)", logs: "var(--sig-logs)", profiles: "var(--sig-profiles)" };
-const STORAGE_KEY = "cx-helm-viz:values";
 const LIVE_DEBOUNCE_MS = 900;
 const CORE_COMPONENTS = {
   receivers: ["otlp"], processors: ["batch", "memory_limiter"],
@@ -35,15 +34,26 @@ const storage = {
 };
 
 /* ------------------------------------------------------------------ state */
-const state = {
-  result: null,
-  collector: 0,
-  view: "graph",
-  signalsOff: new Set(),
-  selected: null,          // {section, id}
-  inflight: null,
-  liveTimer: null,
-};
+/**
+ * Per-tab state. `state` always points at the active workspace tab (see
+ * workspace.js), so rendering code reads the active tab without knowing tabs exist.
+ */
+function newTabState({ id, name, values = "", version = "" }) {
+  return {
+    id, name, values, version,
+    doc: null,               // CodeMirror document (own undo history + cursor)
+    result: null,
+    error: null,
+    status: { text: "", isError: false },
+    collector: 0,
+    view: "graph",
+    signalsOff: new Set(),
+    selected: null,          // {section, id}
+    inflight: null,
+    liveTimer: null,
+  };
+}
+let state = newTabState({ id: "boot", name: "boot" });
 
 /* ------------------------------------------------------------------ editor */
 const editor = (() => {
@@ -52,6 +62,7 @@ const editor = (() => {
     return {
       get: () => textarea.value, set: (v) => { textarea.value = v; },
       onChange: (fn) => textarea.addEventListener("input", fn),
+      show: (tab) => { textarea.value = tab.values; },
       jumpToLine: (line) => {
         const lines = textarea.value.split("\n");
         const start = lines.slice(0, line).reduce((n, l) => n + l.length + 1, 0);
@@ -67,6 +78,12 @@ const editor = (() => {
   return {
     get: () => cm.getValue(), set: (v) => cm.setValue(v),
     onChange: (fn) => cm.on("change", fn),
+    // swapDoc keeps each tab's undo history and cursor, and fires no "change".
+    show: (tab) => {
+      if (!tab.doc) tab.doc = CodeMirror.Doc(tab.values, "yaml");
+      cm.swapDoc(tab.doc);
+      cm.refresh();
+    },
     jumpToLine: (line) => {
       cm.focus();
       cm.setCursor({ line, ch: 0 });
@@ -95,50 +112,61 @@ async function loadVersions() {
     const { versions, local } = await api("/api/versions");
     select.replaceChildren(...versions.map((v, i) => el("option", { value: v }, local ? `local: ${local}` : (i === 0 ? `${v} (latest)` : v))));
     if (!versions.length) select.append(el("option", { value: "" }, "latest"));
+    knownVersions = versions;
   } catch (err) {
     select.replaceChildren(el("option", { value: "" }, "latest"));
     setStatus(`Could not list chart versions: ${err.message}`, true);
   }
 }
 
-function setStatus(text, isError = false) {
+function setStatus(text, isError = false, tab = state) {
+  tab.status = { text, isError };
+  if (tab !== state) return;
   const status = $("#status");
   status.textContent = text;
   status.classList.toggle("error", isError);
 }
 
 async function renderNow() {
-  clearTimeout(state.liveTimer);
-  const values = editor.get();
-  storage.set(STORAGE_KEY, values);
-  if (!values.trim()) return;
+  const tab = state;   // results land in this tab even if the user switches away
+  clearTimeout(tab.liveTimer);
+  tab.values = editor.get();
+  saveWorkspace();
+  if (!tab.values.trim()) return;
   const token = Symbol("render");
-  state.inflight = token;
-  setStatus("Rendering…");
+  tab.inflight = token;
+  setStatus("Rendering…", false, tab);
+  renderTabBar();
   const started = performance.now();
   try {
-    const result = await api("/api/render", { values, version: $("#version").value });
-    if (state.inflight !== token) return;   // a newer render superseded this one
-    state.result = result;
-    state.collector = Math.min(state.collector, Math.max(result.collectors.length - 1, 0));
-    setStatus(`Rendered in ${Math.round(performance.now() - started)} ms`);
-    renderNotices(null);
-    renderAll();
+    const result = await api("/api/render", { values: tab.values, version: tab.version });
+    if (tab.inflight !== token) return;   // a newer render superseded this one
+    tab.result = result;
+    tab.error = null;
+    tab.collector = Math.min(tab.collector, Math.max(result.collectors.length - 1, 0));
+    setStatus(`Rendered in ${Math.round(performance.now() - started)} ms`, false, tab);
   } catch (err) {
-    if (state.inflight !== token) return;
-    setStatus(err.kind === "helm" ? "helm template failed" : "Render failed", true);
-    renderNotices(err);
+    if (tab.inflight !== token) return;
+    tab.error = { message: err.message, kind: err.kind };
+    setStatus(err.kind === "helm" ? "helm template failed" : "Render failed", true, tab);
+  } finally {
+    if (tab.inflight === token) tab.inflight = null;
   }
+  renderTabBar();
+  if (tab === state) { renderNotices(); renderAll(); }
 }
 
 function scheduleLive() {
+  state.values = editor.get();
+  saveWorkspaceSoon();
   if (!$("#auto").checked) return;
   clearTimeout(state.liveTimer);
   state.liveTimer = setTimeout(renderNow, LIVE_DEBOUNCE_MS);
 }
 
 /* ------------------------------------------------------------------ notices */
-function renderNotices(err) {
+function renderNotices() {
+  const err = state.error;
   const host = $("#notices");
   const items = [];
   if (err) items.push(el("div", { class: "notice error" }, err.message));
@@ -287,7 +315,7 @@ function renderGraph() {
     graphHost.append(el("div", { class: "empty" }, "All signals are filtered out."));
     return;
   }
-  PipelineGraph.render(graphHost, c.id, pipelines, {
+  PipelineGraph.render(graphHost, `${state.id}:${c.id}`, pipelines, {
     el, cssId,
     signalColor: (s) => SIGNAL_COLOR[s] || "var(--muted)",
     originLabel: (o) => ORIGIN_LABEL[o],
@@ -441,51 +469,9 @@ function initSplitter() {
   splitter.addEventListener("pointerup", () => { dragging = false; splitter.classList.remove("dragging"); });
 }
 
-function loadFile(file) {
-  if (!file) return;
-  file.text().then((text) => { editor.set(text); renderNow(); })
-    .catch((err) => setStatus(`Could not read file: ${err.message}`, true));
-}
-
-async function loadStarter() {
-  try {
-    const res = await fetch("starter-values.yaml");
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    editor.set(await res.text());
-    renderNow();
-  } catch (err) { setStatus(`Could not load starter values: ${err.message}`, true); }
-}
-
 function download(name, text) {
   const url = URL.createObjectURL(new Blob([text], { type: "text/yaml" }));
   const a = el("a", { href: url, download: name });
   document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-
-function init() {
-  initSplitter();
-  editor.onChange(scheduleLive);
-  $("#render").addEventListener("click", renderNow);
-  $("#load-starter").addEventListener("click", loadStarter);
-  $("#file-input").addEventListener("change", (e) => loadFile(e.target.files[0]));
-  $("#version").addEventListener("change", renderNow);
-  $("#drawer-close").addEventListener("click", closeDrawer);
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeDrawer();
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") renderNow();
-  });
-  document.querySelectorAll(".view-switch button").forEach((b) => b.addEventListener("click", () => { state.view = b.dataset.view; renderView(); }));
-  $("#copy-yaml").addEventListener("click", () => navigator.clipboard.writeText(currentCollector().relay).then(() => setStatus("Copied rendered config")));
-  $("#download-yaml").addEventListener("click", () => { const c = currentCollector(); download(`${c.id}-config.yaml`, c.relay); });
-  const host = $("#editor-host");
-  host.addEventListener("dragover", (e) => e.preventDefault());
-  host.addEventListener("drop", (e) => { e.preventDefault(); loadFile(e.dataTransfer.files[0]); });
-  
-  loadVersions().then(() => {
-    const saved = storage.get(STORAGE_KEY);
-    if (saved && saved.trim()) { editor.set(saved); renderNow(); } else loadStarter();
-  });
-}
-
-init();

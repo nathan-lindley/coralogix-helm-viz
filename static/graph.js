@@ -28,7 +28,8 @@ const PipelineGraph = (() => {
   let world = null;      // transformed element holding lanes/nodes/edges
   let view = { x: 0, y: 0, k: 1 };
   let layout = null;     // last computed layout (for focus / fit)
-  let lastCollectorId = null;
+  let viewKey = null;       // which saved view `view` belongs to
+  const savedViews = new Map(); // viewKey -> {x, y, k}, e.g. per workspace tab + collector
 
   const svg = (tag, attrs = {}) => {
     const n = document.createElementNS(SVG_NS, tag);
@@ -258,6 +259,7 @@ const PipelineGraph = (() => {
 
   /* ------------------------------------------------------------ pan / zoom */
   function apply() {
+    if (viewKey !== null) savedViews.set(viewKey, view);
     world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.k})`;
     const label = viewport.parentElement.querySelector(".zoom-level");
     if (label) label.textContent = `${Math.round(view.k * 100)}%`;
@@ -371,10 +373,12 @@ const PipelineGraph = (() => {
   /**
    * helpers: { el, cssId, signalColor, originLabel, errorsFor(pipelineId), makeNode(item, kind, step) }
    */
-  function render(host, collectorId, pipelines, helpers) {
+  /** key: identifies the saved pan/zoom to restore (e.g. `${tabId}:${collectorId}`). */
+  function render(host, key, pipelines, helpers) {
     layout = computeLayout(pipelines);
-    const keepView = lastCollectorId === collectorId && world;
-    lastCollectorId = collectorId;
+    viewKey = key;
+    const saved = savedViews.get(key);
+    if (saved) view = saved;
 
     for (const lane of layout.lanes) for (const n of lane.nodes) n.key = helpers.keyFor(n.item, n.kind);
 
@@ -401,7 +405,7 @@ const PipelineGraph = (() => {
     const hint = helpers.el("div", { class: "graph-hint" }, "drag to pan · scroll to zoom");
     host.replaceChildren(helpers.el("div", { class: "graph-frame" }, viewport, controls, hint));
     attachPanZoom();
-    if (keepView) apply(); else requestAnimationFrame(() => fit(false));
+    if (saved) apply(); else requestAnimationFrame(() => fit(false));
   }
 
   function focusPipeline(id) {
@@ -417,5 +421,9 @@ const PipelineGraph = (() => {
       .forEach((p) => p.classList.toggle("hl", on));
   }
 
-  return { render, focusPipeline, highlightEdges, fit, _computeLayout: computeLayout };
+  function forget(prefix) {
+    for (const k of [...savedViews.keys()]) if (k.startsWith(prefix)) savedViews.delete(k);
+  }
+
+  return { render, focusPipeline, highlightEdges, fit, forget, _computeLayout: computeLayout };
 })();

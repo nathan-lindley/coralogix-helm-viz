@@ -19,13 +19,15 @@
         <select id="version"></select>
       </label>
       <button id="load-starter" class="ghost" type="button" title="Load a generic starter values file">Starter</button>
-      <label class="ghost button" for="file-input">Open file…</label>
-      <input id="file-input" type="file" accept=".yaml,.yml,.txt" hidden>
+      <label class="ghost button" for="file-input" title="Each file opens in its own tab">Open file…</label>
+      <input id="file-input" type="file" accept=".yaml,.yml,.txt" multiple hidden>
       <label class="toggle"><input id="auto" type="checkbox" checked> Live</label>
       <button id="render" class="primary" type="button" title="Cmd/Ctrl + Enter">Render</button>
       <span id="status" class="status" role="status" aria-live="polite"></span>
     </div>
   </header>
+
+  <nav id="workspace-tabs" class="workspace-tabs" role="tablist" aria-label="Workspace tabs"></nav>
 
   <main class="layout">
     <section class="editor-pane" aria-label="values.yaml">
@@ -84,5 +86,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/yaml/yaml.min.js" integrity="sha384-9q49Jm3hZMwxEMLImsxPxLiaptHpFz1PVa26Dg6SVIO+rj5kx0cgOM2+4ikKJFH9" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="graph.js"></script>
   <script src="app.js"></script>
+  <script src="workspace.js"></script>
 </body>
 </html>

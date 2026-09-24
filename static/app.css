@@ -87,6 +87,27 @@ button:hover, .button:hover { filter: brightness(0.97); }
 .status { min-width: 120px; color: var(--muted); }
 .status.error { color: var(--error); }
 
+/* ---------- workspace tabs ---------- */
+.workspace-tabs { display: flex; align-items: stretch; gap: 2px; padding: 4px 8px 0; background: var(--panel-2); border-bottom: 1px solid var(--border); overflow-x: auto; }
+.ws-tab { display: flex; align-items: center; gap: 6px; padding: 5px 6px 5px 10px; border: 1px solid transparent; border-bottom: 0;
+  border-radius: 7px 7px 0 0; cursor: pointer; white-space: nowrap; max-width: 280px; color: var(--muted); }
+.ws-tab:hover { background: color-mix(in srgb, var(--panel) 60%, transparent); }
+.ws-tab.active { background: var(--panel); border-color: var(--border); color: var(--text); margin-bottom: -1px; font-weight: 600; }
+.ws-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ws-name { overflow: hidden; text-overflow: ellipsis; }
+.ws-version { font: 10px var(--mono); color: var(--muted); background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 0 5px; font-weight: 400; }
+.ws-close { border: 0; background: transparent; padding: 0 4px; line-height: 1; font-size: 14px; color: var(--muted); border-radius: 4px; }
+.ws-close:hover { background: var(--panel-2); color: var(--text); }
+.ws-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.ws-dot.error { background: var(--error); }
+.ws-dot.warn { background: var(--warning); }
+.ws-dot.busy { background: var(--accent); animation: ws-pulse 0.9s ease-in-out infinite alternate; }
+@keyframes ws-pulse { from { opacity: 0.25; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .ws-dot.busy { animation: none; } }
+.ws-rename { font: inherit; width: 160px; padding: 1px 4px; border: 1px solid var(--accent); border-radius: 4px; background: var(--panel); color: var(--text); }
+.ws-action { align-self: center; margin-left: 4px; padding: 2px 9px; background: transparent; color: var(--muted); }
+.ws-action:hover { color: var(--text); }
+
 /* ---------- layout ---------- */
 .layout { flex: 1; display: flex; min-height: 0; position: relative; }
 .editor-pane { width: 40%; min-width: 260px; display: flex; flex-direction: column; background: var(--panel); }
