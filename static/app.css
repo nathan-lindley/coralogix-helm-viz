@@ -156,7 +156,7 @@ button:hover, .button:hover { filter: brightness(0.97); }
 .lane { position: absolute; background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--border);
   border-left: 4px solid var(--sig); border-radius: 10px; transition: box-shadow 0.2s; }
 .lane.focus { box-shadow: 0 0 0 3px var(--accent); }
-.lane-head { position: absolute; left: 10px; top: 6px; right: 10px; display: flex; align-items: center; gap: 8px; font-size: 12px; cursor: default; }
+.lane-head { position: absolute; left: 10px; top: 4px; right: 10px; display: flex; align-items: center; gap: 8px; font-size: 11px; line-height: 16px; cursor: default; }
 .lane-head .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sig); }
 .lane-head .name { font-family: var(--mono); font-weight: 600; }
 .lane-head .counts { margin-left: auto; color: var(--muted); font-size: 11px; }

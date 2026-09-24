@@ -11,8 +11,9 @@
  */
 const PipelineGraph = (() => {
   const L = {
-    nodeH: 28, vGap: 10, procGap: 34, colGap: 64,
-    lanePad: 14, laneHeader: 30, laneGap: 22,
+    nodeH: 24, vGap: 6, procGap: 30, colGap: 56, gridGap: 12,
+    lanePad: 10, laneHeader: 24, rowGap: 12,
+    maxStack: 4,   // receivers/exporters wrap into another column beyond this
     charW: 7.25, nodePadX: 22, stepW: 16, minW: 96, maxW: 340,
     laneHGap: 90,
   };
@@ -45,19 +46,33 @@ const PipelineGraph = (() => {
     return (i) => top + i * (L.nodeH + L.vGap);
   }
 
+  /**
+   * Place items in a column-major grid of at most L.maxStack rows, vertically
+   * centred in the lane content. Returns the nodes and the grid's width.
+   */
+  function grid(items, kind, x0, top, contentH, colW) {
+    const rows = Math.min(Math.max(items.length, 1), L.maxStack);
+    const cols = Math.ceil(items.length / rows);
+    const y = stackY(rows, top, contentH);
+    const nodes = items.map((item, i) => ({
+      item, kind, x: x0 + Math.floor(i / rows) * (colW + L.gridGap), y: y(i % rows), w: colW,
+    }));
+    return { nodes, width: cols ? cols * colW + (cols - 1) * L.gridGap : 0 };
+  }
+
   /** Lane geometry with the lane's own top-left at (0, 0). */
   function laneGeometry(p) {
-    const recvColW = Math.max(L.minW, ...p.receivers.map((r) => nodeWidth(r.id)));
-    const rows = Math.max(p.receivers.length, p.exporters.length, 1);
+    const stacked = (n) => Math.min(Math.max(n, 1), L.maxStack);
+    const rows = Math.max(stacked(p.receivers.length), stacked(p.exporters.length));
     const contentH = rows * L.nodeH + (rows - 1) * L.vGap;
     const top = L.laneHeader;
     const midY = top + contentH / 2 - L.nodeH / 2;
-    const nodes = [];
 
-    const recvY = stackY(p.receivers.length, top, contentH);
-    p.receivers.forEach((item, i) => nodes.push({ item, kind: "receivers", x: L.lanePad, y: recvY(i), w: recvColW }));
+    const recvW = Math.max(L.minW, ...p.receivers.map((r) => nodeWidth(r.id)));
+    const recv = grid(p.receivers, "receivers", L.lanePad, top, contentH, recvW);
+    const nodes = [...recv.nodes];
 
-    let x = L.lanePad + recvColW + L.colGap;
+    let x = L.lanePad + Math.max(recv.width, L.minW) + L.colGap;
     p.processors.forEach((item, i) => {
       const w = nodeWidth(item.id, true);
       nodes.push({ item, kind: "processors", step: i + 1, x, y: midY, w });
@@ -65,10 +80,10 @@ const PipelineGraph = (() => {
     });
     const expX = p.processors.length ? x - L.procGap + L.colGap : x;
     const expW = Math.max(L.minW, ...p.exporters.map((e) => nodeWidth(e.id)));
-    const expY = stackY(p.exporters.length, top, contentH);
-    p.exporters.forEach((item, i) => nodes.push({ item, kind: "exporters", x: expX, y: expY(i), w: expW }));
+    const exp = grid(p.exporters, "exporters", expX, top, contentH, expW);
+    nodes.push(...exp.nodes);
 
-    return { nodes, w: expX + expW + L.lanePad, h: L.laneHeader + contentH + L.lanePad };
+    return { nodes, w: expX + Math.max(exp.width, L.minW) + L.lanePad, h: L.laneHeader + contentH + L.lanePad };
   }
 
   /**
@@ -110,8 +125,8 @@ const PipelineGraph = (() => {
 
   /**
    * Lanes are placed so data only ever flows left-to-right: a pipeline fed by a
-   * connector starts to the right of every pipeline that exports to it. Rows
-   * are ordered by depth, so the graph reads as a staircase down and right.
+   * connector starts to the right of every pipeline that exports to it. Lanes
+   * that don't overlap horizontally share a row to keep the graph compact.
    */
   function computeLayout(pipelines) {
     const upstream = upstreamMap(pipelines);
@@ -124,18 +139,34 @@ const PipelineGraph = (() => {
       place[id] = { x, depth };
     }
 
-    const rows = [...byId.values()].sort((a, b) =>
+    // First-fit row packing: a lane joins the first row where it doesn't
+    // overlap horizontally. x never changes, so flow stays left-to-right.
+    const ordered = [...byId.values()].sort((a, b) =>
       place[a.p.id].depth - place[b.p.id].depth || a.index - b.index);
+    const rows = [];
+    for (const entry of ordered) {
+      const x = place[entry.p.id].x;
+      const span = [x, x + entry.geo.w];
+      const fits = (row) => row.spans.every(([l, r]) => span[0] >= r + L.laneHGap || span[1] + L.laneHGap <= l);
+      let row = rows.find(fits);
+      if (!row) { row = { spans: [], entries: [], h: 0 }; rows.push(row); }
+      row.spans.push(span);
+      row.entries.push(entry);
+      row.h = Math.max(row.h, entry.geo.h);
+    }
+
     const lanes = [];
     let y = 0;
-    for (const { p, geo } of rows) {
-      const { x } = place[p.id];
-      const nodes = geo.nodes.map((n) => ({ ...n, x: n.x + x, y: n.y + y }));
-      lanes.push({ pipeline: p, x, y, w: geo.w, h: geo.h, right: x + geo.w, nodes });
-      y += geo.h + L.laneGap;
+    for (const row of rows) {
+      for (const { p, geo } of row.entries) {
+        const { x } = place[p.id];
+        const nodes = geo.nodes.map((n) => ({ ...n, x: n.x + x, y: n.y + y }));
+        lanes.push({ pipeline: p, x, y, w: geo.w, h: geo.h, right: x + geo.w, nodes });
+      }
+      y += row.h + L.rowGap;
     }
     const width = Math.max(600, ...lanes.map((l) => l.right));
-    return { lanes, width, height: Math.max(y - L.laneGap, 0) };
+    return { lanes, width, height: Math.max(y - L.rowGap, 0) };
   }
 
   /* ------------------------------------------------------------ edges */
