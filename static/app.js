@@ -447,12 +447,13 @@ function loadFile(file) {
     .catch((err) => setStatus(`Could not read file: ${err.message}`, true));
 }
 
-async function loadExample() {
+async function loadStarter() {
   try {
-    const { values } = await api("/api/example");
-    editor.set(values);
+    const res = await fetch("starter-values.yaml");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    editor.set(await res.text());
     renderNow();
-  } catch (err) { setStatus(`Could not load example: ${err.message}`, true); }
+  } catch (err) { setStatus(`Could not load starter values: ${err.message}`, true); }
 }
 
 function download(name, text) {
@@ -466,7 +467,7 @@ function init() {
   initSplitter();
   editor.onChange(scheduleLive);
   $("#render").addEventListener("click", renderNow);
-  $("#load-example").addEventListener("click", loadExample);
+  $("#load-starter").addEventListener("click", loadStarter);
   $("#file-input").addEventListener("change", (e) => loadFile(e.target.files[0]));
   $("#version").addEventListener("change", renderNow);
   $("#drawer-close").addEventListener("click", closeDrawer);
@@ -483,7 +484,7 @@ function init() {
   
   loadVersions().then(() => {
     const saved = storage.get(STORAGE_KEY);
-    if (saved && saved.trim()) { editor.set(saved); renderNow(); } else loadExample();
+    if (saved && saved.trim()) { editor.set(saved); renderNow(); } else loadStarter();
   });
 }
 

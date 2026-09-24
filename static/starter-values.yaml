@@ -1,0 +1,43 @@
+# Generic starter values for the Coralogix otel-integration chart.
+# Replace with your own values.yaml (paste, drop a file, or "Open file…").
+global:
+  domain: coralogix.com
+  clusterName: my-cluster
+
+opentelemetry-agent:
+  presets:
+    logsCollection:
+      enabled: true
+  config:
+    processors:
+      filter/drop-healthchecks:
+        error_mode: ignore
+        logs:
+          log_record:
+            - 'IsMatch(body, ".*GET /healthz.*")'
+      resource/team:
+        attributes:
+          - action: upsert
+            key: team
+            value: platform
+    service:
+      pipelines:
+        logs:
+          processors:
+            - memory_limiter
+            - filter/drop-healthchecks
+            - resource/team
+        traces:
+          processors:
+            - memory_limiter
+            - resource/team
+
+opentelemetry-cluster-collector:
+  config:
+    receivers:
+      prometheus/unused:
+        config:
+          scrape_configs:
+            - job_name: example
+              static_configs:
+                - targets: ["localhost:9090"]

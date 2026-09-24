@@ -26,7 +26,6 @@ from cxviz import helm  # noqa: E402
 from cxviz.service import InputError, analyse  # noqa: E402
 
 STATIC_DIR = ROOT / "static"
-EXAMPLE_FILE = ROOT / "examples" / "values.yaml"
 MAX_BODY_BYTES = 4 * 1024 * 1024
 
 log = logging.getLogger("cx-helm-viz")
@@ -55,9 +54,6 @@ class Handler(SimpleHTTPRequestHandler):
             if self.local_chart:
                 return self._json(200, {"versions": ["local"], "local": str(self.local_chart)})
             return self._json(200, {"versions": helm.list_versions()})
-        if self.path == "/api/example":
-            text = EXAMPLE_FILE.read_text() if EXAMPLE_FILE.exists() else ""
-            return self._json(200, {"values": text})
         return super().do_GET()
 
     def do_POST(self):
