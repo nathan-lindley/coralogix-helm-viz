@@ -4,17 +4,17 @@
  * Single-canvas pipeline graph (otelbin-style).
  *
  * Every pipeline is a horizontal lane: receivers stacked on the left, the
- * processor chain left-to-right, exporters stacked on the right. Lanes are
- * stacked vertically and share one pan/zoom surface; connectors get an extra
- * dashed edge from the lane that exports to them to every lane that receives
- * from them.
+ * processor chain left-to-right, exporters stacked on the right. Lanes share
+ * one pan/zoom surface. A lane fed by a connector starts to the right of every
+ * lane exporting to it, so all edges — including the dashed connector links —
+ * point rightwards and nothing loops back.
  */
 const PipelineGraph = (() => {
   const L = {
     nodeH: 28, vGap: 10, procGap: 34, colGap: 64,
     lanePad: 14, laneHeader: 30, laneGap: 22,
     charW: 7.25, nodePadX: 22, stepW: 16, minW: 96, maxW: 340,
-    connectorBend: 140,
+    laneHGap: 90,
   };
   const MIN_SCALE = 0.15;
   const MAX_SCALE = 2.5;
@@ -43,34 +43,94 @@ const PipelineGraph = (() => {
     return (i) => top + i * (L.nodeH + L.vGap);
   }
 
+  /** Lane geometry with the lane's own top-left at (0, 0). */
+  function laneGeometry(p) {
+    const recvColW = Math.max(L.minW, ...p.receivers.map((r) => nodeWidth(r.id)));
+    const rows = Math.max(p.receivers.length, p.exporters.length, 1);
+    const contentH = rows * L.nodeH + (rows - 1) * L.vGap;
+    const top = L.laneHeader;
+    const midY = top + contentH / 2 - L.nodeH / 2;
+    const nodes = [];
+
+    const recvY = stackY(p.receivers.length, top, contentH);
+    p.receivers.forEach((item, i) => nodes.push({ item, kind: "receivers", x: L.lanePad, y: recvY(i), w: recvColW }));
+
+    let x = L.lanePad + recvColW + L.colGap;
+    p.processors.forEach((item, i) => {
+      const w = nodeWidth(item.id, true);
+      nodes.push({ item, kind: "processors", step: i + 1, x, y: midY, w });
+      x += w + L.procGap;
+    });
+    const expX = p.processors.length ? x - L.procGap + L.colGap : x;
+    const expW = Math.max(L.minW, ...p.exporters.map((e) => nodeWidth(e.id)));
+    const expY = stackY(p.exporters.length, top, contentH);
+    p.exporters.forEach((item, i) => nodes.push({ item, kind: "exporters", x: expX, y: expY(i), w: expW }));
+
+    return { nodes, w: expX + expW + L.lanePad, h: L.laneHeader + contentH + L.lanePad };
+  }
+
+  /**
+   * pipeline id -> ids of pipelines that feed it through a connector
+   * (they list the connector as an exporter; it lists it as a receiver).
+   */
+  function upstreamMap(pipelines) {
+    const exportersOf = {};
+    for (const p of pipelines) {
+      for (const e of p.exporters) if (e.connector) (exportersOf[e.id] = exportersOf[e.id] || new Set()).add(p.id);
+    }
+    const upstream = {};
+    for (const p of pipelines) {
+      const feeders = new Set();
+      for (const r of p.receivers) {
+        if (!r.connector) continue;
+        for (const q of exportersOf[r.id] || []) if (q !== p.id) feeders.add(q);
+      }
+      upstream[p.id] = feeders;
+    }
+    return upstream;
+  }
+
+  /** Topological order (Kahn). Pipelines caught in a cycle are appended as-is. */
+  function topoOrder(pipelines, upstream) {
+    const pending = new Map(pipelines.map((p) => [p.id, new Set(upstream[p.id])]));
+    const order = [];
+    while (pending.size) {
+      const ready = [...pending].filter(([, deps]) => deps.size === 0).map(([id]) => id);
+      const batch = ready.length ? ready : [pending.keys().next().value];
+      for (const id of batch) {
+        order.push(id);
+        pending.delete(id);
+        for (const deps of pending.values()) deps.delete(id);
+      }
+    }
+    return order;
+  }
+
+  /**
+   * Lanes are placed so data only ever flows left-to-right: a pipeline fed by a
+   * connector starts to the right of every pipeline that exports to it. Rows
+   * are ordered by depth, so the graph reads as a staircase down and right.
+   */
   function computeLayout(pipelines) {
-    const recvColW = Math.max(L.minW, ...pipelines.flatMap((p) => p.receivers.map((r) => nodeWidth(r.id))));
+    const upstream = upstreamMap(pipelines);
+    const byId = new Map(pipelines.map((p, i) => [p.id, { p, index: i, geo: laneGeometry(p) }]));
+    const place = {};
+    for (const id of topoOrder(pipelines, upstream)) {
+      const feeders = [...upstream[id]].filter((q) => place[q]);
+      const x = feeders.length ? Math.max(...feeders.map((q) => place[q].x + byId.get(q).geo.w)) + L.laneHGap : 0;
+      const depth = feeders.length ? Math.max(...feeders.map((q) => place[q].depth)) + 1 : 0;
+      place[id] = { x, depth };
+    }
+
+    const rows = [...byId.values()].sort((a, b) =>
+      place[a.p.id].depth - place[b.p.id].depth || a.index - b.index);
     const lanes = [];
     let y = 0;
-    for (const p of pipelines) {
-      const rows = Math.max(p.receivers.length, p.exporters.length, 1);
-      const contentH = rows * L.nodeH + (rows - 1) * L.vGap;
-      const laneH = L.laneHeader + contentH + L.lanePad;
-      const top = y + L.laneHeader;
-      const midY = top + contentH / 2 - L.nodeH / 2;
-      const nodes = [];
-
-      const recvY = stackY(p.receivers.length, top, contentH);
-      p.receivers.forEach((item, i) => nodes.push({ item, kind: "receivers", x: L.lanePad, y: recvY(i), w: recvColW }));
-
-      let x = L.lanePad + recvColW + L.colGap;
-      p.processors.forEach((item, i) => {
-        const w = nodeWidth(item.id, true);
-        nodes.push({ item, kind: "processors", step: i + 1, x, y: midY, w });
-        x += w + L.procGap;
-      });
-      const expX = p.processors.length ? x - L.procGap + L.colGap : x;
-      const expW = Math.max(L.minW, ...p.exporters.map((e) => nodeWidth(e.id)));
-      const expY = stackY(p.exporters.length, top, contentH);
-      p.exporters.forEach((item, i) => nodes.push({ item, kind: "exporters", x: expX, y: expY(i), w: expW }));
-
-      lanes.push({ pipeline: p, y, h: laneH, right: expX + expW + L.lanePad, nodes });
-      y += laneH + L.laneGap;
+    for (const { p, geo } of rows) {
+      const { x } = place[p.id];
+      const nodes = geo.nodes.map((n) => ({ ...n, x: n.x + x, y: n.y + y }));
+      lanes.push({ pipeline: p, x, y, w: geo.w, h: geo.h, right: x + geo.w, nodes });
+      y += geo.h + L.laneGap;
     }
     const width = Math.max(600, ...lanes.map((l) => l.right));
     return { lanes, width, height: Math.max(y - L.laneGap, 0) };
@@ -114,7 +174,7 @@ const PipelineGraph = (() => {
     for (const [id, outs] of Object.entries(sources)) {
       for (const from of outs) {
         for (const to of sinks[id] || []) {
-          edges.push({ d: curve(right(from), left(to), L.connectorBend), from, to, connector: id });
+          edges.push({ d: curve(right(from), left(to)), from, to, connector: id });
         }
       }
     }
@@ -134,14 +194,19 @@ const PipelineGraph = (() => {
     apply();
   }
 
-  function fit() {
+  /**
+   * whole=false (initial load): fit the width but stay legible; the rest pans.
+   * whole=true (Fit button): show the entire graph, however small.
+   */
+  function fit(whole = false) {
     if (!layout || !viewport) return;
     const pad = 24;
     const vw = viewport.clientWidth - pad * 2;
     const vh = viewport.clientHeight - pad * 2;
     if (vw <= 0 || vh <= 0) return;
-    // Fit the width (the height scrolls), but never shrink below legibility.
-    const scale = Math.min(1, Math.max(MIN_FIT_SCALE, vw / layout.width));
+    const scale = whole
+      ? Math.max(MIN_SCALE, Math.min(1, vw / layout.width, vh / Math.max(layout.height, 1)))
+      : Math.min(1, Math.max(MIN_FIT_SCALE, vw / layout.width));
     view = { k: scale, x: pad + Math.max(0, (vw - layout.width * scale) / 2), y: pad };
     apply();
   }
@@ -176,16 +241,16 @@ const PipelineGraph = (() => {
 
   function centerOn(lane) {
     const vh = viewport.clientHeight;
-    view = { ...view, x: Math.min(view.x, 24), y: vh / 2 - (lane.y + lane.h / 2) * view.k };
+    view = { ...view, x: 24 - lane.x * view.k, y: vh / 2 - (lane.y + lane.h / 2) * view.k };
     apply();
   }
 
   /* ------------------------------------------------------------ render */
-  function laneBox(lane, width, helpers) {
+  function laneBox(lane, helpers) {
     const p = lane.pipeline;
     const box = helpers.el("div", {
       class: "lane", id: `lane-${helpers.cssId(p.id)}`,
-      style: `top:${lane.y}px;height:${lane.h}px;width:${width}px;--sig:${helpers.signalColor(p.signal)}`,
+      style: `left:${lane.x}px;top:${lane.y}px;height:${lane.h}px;width:${lane.w}px;--sig:${helpers.signalColor(p.signal)}`,
       dataset: { pipeline: p.id },
     });
     const errors = helpers.errorsFor(p.id);
@@ -230,7 +295,7 @@ const PipelineGraph = (() => {
     world = helpers.el("div", { class: "world", style: `width:${layout.width}px;height:${layout.height}px` });
     const laneEdgeList = layout.lanes.flatMap(laneEdges);
     const connEdges = connectorEdges(layout.lanes);
-    world.append(...layout.lanes.map((lane) => laneBox(lane, layout.width, helpers)));
+    world.append(...layout.lanes.map((lane) => laneBox(lane, helpers)));
     world.append(edgeLayer(layout.width, layout.height, laneEdgeList, "flow"));
     world.append(edgeLayer(layout.width, layout.height, connEdges, "links"));
     for (const lane of layout.lanes) {
@@ -246,11 +311,11 @@ const PipelineGraph = (() => {
       helpers.el("button", { type: "button", title: "Zoom out", onclick: () => zoomAt(1 / 1.2, viewport.clientWidth / 2, viewport.clientHeight / 2) }, "−"),
       helpers.el("span", { class: "zoom-level" }),
       helpers.el("button", { type: "button", title: "Zoom in", onclick: () => zoomAt(1.2, viewport.clientWidth / 2, viewport.clientHeight / 2) }, "+"),
-      helpers.el("button", { type: "button", title: "Fit to view", onclick: fit }, "Fit"));
+      helpers.el("button", { type: "button", title: "Show the whole graph", onclick: () => fit(true) }, "Fit"));
     const hint = helpers.el("div", { class: "graph-hint" }, "drag to pan · scroll to move · pinch / ⌘-scroll to zoom");
     host.replaceChildren(helpers.el("div", { class: "graph-frame" }, viewport, controls, hint));
     attachPanZoom();
-    if (keepView) apply(); else requestAnimationFrame(fit);
+    if (keepView) apply(); else requestAnimationFrame(() => fit(false));
   }
 
   function focusPipeline(id) {

@@ -14,7 +14,7 @@ Options: `--chart ./path/to/otel-integration` renders a local chart checkout. `-
 ## What you get
 
 - **One tab per collector** (agent DaemonSet, cluster-collector Deployment, gateway, and so on), with error and warning badges.
-- **One pan/zoom graph** (like otelbin). Each pipeline is a lane, grouped by signal: receivers → numbered processor chain → exporters. Connectors (`spanmetrics`, `forward/*`) are dashed, with a link from the exporting lane to every receiving lane. Drag to pan, scroll to move, and pinch or ⌘-scroll to zoom. Hovering a component highlights it and its edges in every pipeline.
+- **One pan/zoom graph** (like otelbin). Each pipeline is a lane, grouped by signal: receivers → numbered processor chain → exporters. Connectors (`spanmetrics`, `forward/*`) are dashed. A pipeline fed by a connector starts to the right of the pipeline exporting to it, so everything flows left to right and nothing loops back. Drag to pan, scroll to move, and pinch or ⌘-scroll to zoom. **Fit** shows the whole graph. Hovering a component highlights it and its edges in every pipeline.
 - **Provenance colouring.** The chart is rendered a second time with every `config:` block removed. Comparing the two renders tags each component as a *chart preset*, *your values* or *overridden*. This makes it obvious when presets add processors (for example `k8sattributes` and `batch`) around the ones you listed.
 - **Details drawer**: the merged YAML for the component, which pipelines use it, a docs link and "Show in values.yaml".
 - **Problems**: references to undefined components, defined but unused components, connectors wired on only one side, duplicate entries, unknown signal types, undefined or disabled extensions, and ordering hints for `memory_limiter` and `batch`.
