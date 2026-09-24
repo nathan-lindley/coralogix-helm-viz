@@ -4,12 +4,27 @@ An otelbin.io-style visualiser for the Coralogix `otel-integration` Helm chart.
 Paste or open a `values.yaml`. The tool runs `helm template` against the real chart,
 so the graph shows the **effective** collector config after the chart's presets have merged in.
 
+![Pipeline graph for the generic starter values](docs/screenshot.png)
+
 ```bash
 uv run server.py            # or: python3 server.py   (needs pyyaml + helm on PATH)
 # → http://127.0.0.1:8765
 ```
 
 Options: `--chart ./path/to/otel-integration` renders a local chart checkout. `--port`, `--no-browser` and `-v` also work.
+
+## Requirements and network access
+
+- **Python 3.9+** with `pyyaml`. `uv run server.py` installs it automatically.
+- **`helm`** on your `PATH`, or set `HELM_BIN`.
+- **Chart downloads.** The first time you use a chart version, the server downloads it from Coralogix's public chart repository (`https://cgx.jfrog.io/artifactory/coralogix-charts-virtual`) and caches it in `~/.cache/cx-helm-viz`; set `CX_HELM_VIZ_CACHE` to change where. The version list comes from a `coralogix` repo in your local helm config (`helm repo add coralogix https://cgx.jfrog.io/artifactory/coralogix-charts-virtual`); without it, only the latest version is offered. Use `--chart` to work fully offline.
+- **Browser libraries.** The page loads CodeMirror (the editor) and jsdiff (the diffs) from cdnjs, pinned with integrity hashes. Without them the editor falls back to a plain text box and the line diffs are unavailable; everything else works.
+
+## Privacy
+
+- **Your values never leave your machine.** The browser sends them only to the local server, which renders them with your local `helm`. The server listens on `127.0.0.1` by default; don't expose it with `--host` on a shared network. The only outbound requests are the chart downloads and the cdnjs libraries above, and neither carries your values.
+- **Tabs are stored in your browser.** Every tab's full `values.yaml` is kept in the browser's local storage for this site (`localhost:8765`), so it survives a reload. If you paste a customer's config, it stays there until you close the tab. Closing all tabs, or clearing site data for `localhost:8765`, removes it.
+- **Templated secrets aren't evaluated.** `{{ ... }}` expressions are replaced with placeholders rather than run, so tools like `exec` never execute.
 
 ## What you get
 
@@ -41,3 +56,7 @@ static/compare.js    tab-vs-tab structural and line diffs (jsdiff from cdnjs, wi
 static/              UI (CodeMirror from cdnjs with SRI; falls back to a textarea offline)
 tests/               python3 -m pytest
 ```
+
+## License
+
+[MIT](LICENSE)
