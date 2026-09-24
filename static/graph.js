@@ -19,6 +19,8 @@ const PipelineGraph = (() => {
   const MIN_SCALE = 0.15;
   const MAX_SCALE = 2.5;
   const MIN_FIT_SCALE = 0.6;
+  const WHEEL_ZOOM_SPEED = 0.0025;
+  const DRAG_THRESHOLD_PX = 4;
   const SVG_NS = "http://www.w3.org/2000/svg";
 
   let viewport = null;   // element receiving pointer events
@@ -212,30 +214,41 @@ const PipelineGraph = (() => {
   }
 
   function attachPanZoom() {
+    // Drag anywhere (nodes included) to pan; a drag longer than a few pixels
+    // swallows the click that would otherwise open the node's details.
     let drag = null;
     viewport.addEventListener("pointerdown", (e) => {
-      if (e.button !== 0 || e.target.closest(".node, .lane-head")) return;
-      drag = { x: e.clientX - view.x, y: e.clientY - view.y };
-      viewport.setPointerCapture(e.pointerId);
-      viewport.classList.add("panning");
+      if (e.button !== 0) return;
+      drag = { startX: e.clientX, startY: e.clientY, x: e.clientX - view.x, y: e.clientY - view.y, moved: false };
     });
     viewport.addEventListener("pointermove", (e) => {
       if (!drag) return;
+      if (!drag.moved && Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < DRAG_THRESHOLD_PX) return;
+      if (!drag.moved) {
+        drag.moved = true;
+        viewport.setPointerCapture(e.pointerId);
+        viewport.classList.add("panning");
+      }
       view = { ...view, x: e.clientX - drag.x, y: e.clientY - drag.y };
       apply();
     });
-    const end = () => { drag = null; viewport.classList.remove("panning"); };
+    const end = () => {
+      if (drag && drag.moved) {
+        const swallow = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
+        viewport.addEventListener("click", swallow, { capture: true, once: true });
+        setTimeout(() => viewport.removeEventListener("click", swallow, { capture: true }), 0);
+      }
+      drag = null;
+      viewport.classList.remove("panning");
+    };
     viewport.addEventListener("pointerup", end);
     viewport.addEventListener("pointercancel", end);
     viewport.addEventListener("wheel", (e) => {
       e.preventDefault();
       const rect = viewport.getBoundingClientRect();
-      if (e.ctrlKey || e.metaKey) {
-        zoomAt(Math.exp(-e.deltaY * 0.01), e.clientX - rect.left, e.clientY - rect.top);
-      } else {
-        view = { ...view, x: view.x - e.deltaX, y: view.y - e.deltaY };
-        apply();
-      }
+      // Scroll zooms around the cursor; line-mode deltas (mouse wheels) are much coarser.
+      const delta = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+      zoomAt(Math.exp(-delta * WHEEL_ZOOM_SPEED), e.clientX - rect.left, e.clientY - rect.top);
     }, { passive: false });
   }
 
@@ -306,13 +319,13 @@ const PipelineGraph = (() => {
       }
     }
 
-    viewport = helpers.el("div", { class: "viewport", tabindex: "0", "aria-label": "Pipeline graph — drag to pan, pinch or Ctrl+scroll to zoom" }, world);
+    viewport = helpers.el("div", { class: "viewport", tabindex: "0", "aria-label": "Pipeline graph — drag to pan, scroll to zoom" }, world);
     const controls = helpers.el("div", { class: "zoom-controls" },
       helpers.el("button", { type: "button", title: "Zoom out", onclick: () => zoomAt(1 / 1.2, viewport.clientWidth / 2, viewport.clientHeight / 2) }, "−"),
       helpers.el("span", { class: "zoom-level" }),
       helpers.el("button", { type: "button", title: "Zoom in", onclick: () => zoomAt(1.2, viewport.clientWidth / 2, viewport.clientHeight / 2) }, "+"),
       helpers.el("button", { type: "button", title: "Show the whole graph", onclick: () => fit(true) }, "Fit"));
-    const hint = helpers.el("div", { class: "graph-hint" }, "drag to pan · scroll to move · pinch / ⌘-scroll to zoom");
+    const hint = helpers.el("div", { class: "graph-hint" }, "drag to pan · scroll to zoom");
     host.replaceChildren(helpers.el("div", { class: "graph-frame" }, viewport, controls, hint));
     attachPanZoom();
     if (keepView) apply(); else requestAnimationFrame(() => fit(false));
