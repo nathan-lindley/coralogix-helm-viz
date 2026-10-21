@@ -86,6 +86,20 @@ def _latest() -> str:
     return versions[0]
 
 
+def _refresh_versions() -> None:
+    """Pull the latest repo index so new chart releases show up in the version list."""
+    log.info("updating the coralogix helm repo…")
+    try:
+        new = helm.refresh_repo()
+    except (helm.HelmError, ValueError, KeyError) as exc:
+        log.warning("could not update the coralogix helm repo (%s); version list may be stale", exc)
+        return
+    if new:
+        log.info("found %d new chart version%s: %s", len(new), "" if len(new) == 1 else "s", ", ".join(new))
+    else:
+        log.info("found 0 new chart versions")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--port", type=int, default=8765)
@@ -100,6 +114,8 @@ def main() -> None:
         if not (args.chart / "Chart.yaml").exists():
             parser.error(f"{args.chart} has no Chart.yaml")
         Handler.local_chart = args.chart.resolve()
+    else:
+        _refresh_versions()
 
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     url = f"http://{args.host}:{args.port}"

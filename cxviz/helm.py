@@ -41,13 +41,26 @@ def _run(args: List[str], timeout: int) -> str:
     return proc.stdout
 
 
+def _search_versions() -> List[str]:
+    """All versions in the local `coralogix` repo index, newest first."""
+    out = _run(["search", "repo", f"coralogix/{CHART_NAME}", "--versions", "-o", "json"], 30)
+    return [row["version"] for row in json.loads(out)]
+
+
+def refresh_repo() -> List[str]:
+    """`helm repo update coralogix`; return versions that weren't in the index before."""
+    try:
+        before = set(_search_versions())
+    except (HelmError, ValueError, KeyError):
+        before = set()
+    _run(["repo", "update", "coralogix"], 60)
+    return [v for v in _search_versions() if v not in before]
+
+
 def list_versions(limit: int = 40) -> List[str]:
     """Chart versions, newest first. Falls back to just 'latest' if unavailable."""
     try:
-        out = _run(
-            ["search", "repo", f"coralogix/{CHART_NAME}", "--versions", "-o", "json"], 30
-        )
-        versions = [row["version"] for row in json.loads(out)]
+        versions = _search_versions()
         if versions:
             return versions[:limit]
     except (HelmError, ValueError, KeyError):

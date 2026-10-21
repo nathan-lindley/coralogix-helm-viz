@@ -17,7 +17,7 @@ Options: `--chart ./path/to/otel-integration` renders a local chart checkout. `-
 
 - **Python 3.9+** with `pyyaml`. `uv run server.py` installs it automatically.
 - **`helm`** on your `PATH`, or set `HELM_BIN`.
-- **Chart downloads.** The first time you use a chart version, the server downloads it from Coralogix's public chart repository (`https://cgx.jfrog.io/artifactory/coralogix-charts-virtual`) and caches it in `~/.cache/cx-helm-viz`; set `CX_HELM_VIZ_CACHE` to change where. The version list comes from a `coralogix` repo in your local helm config (`helm repo add coralogix https://cgx.jfrog.io/artifactory/coralogix-charts-virtual`); without it, only the latest version is offered. Use `--chart` to work fully offline.
+- **Chart downloads.** The first time you use a chart version, the server downloads it from Coralogix's public chart repository (`https://cgx.jfrog.io/artifactory/coralogix-charts-virtual`) and caches it in `~/.cache/cx-helm-viz`; set `CX_HELM_VIZ_CACHE` to change where. The version list comes from a `coralogix` repo in your local helm config (`helm repo add coralogix https://cgx.jfrog.io/artifactory/coralogix-charts-virtual`), which the server refreshes with `helm repo update coralogix` on startup and reports how many new chart versions it found; without that repo, only the latest version is offered. Use `--chart` to work fully offline.
 - **Browser libraries.** The page loads CodeMirror (the editor) and jsdiff (the diffs) from cdnjs, pinned with integrity hashes. Without them the editor falls back to a plain text box and the line diffs are unavailable; everything else works.
 
 ## Privacy
