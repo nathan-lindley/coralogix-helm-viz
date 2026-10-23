@@ -183,6 +183,17 @@ function renderNotices() {
       items.push(el("div", { class: "notice" }, "Unresolved variables kept literally: ",
         ...r.variables.flatMap((v, i) => [i ? ", " : "", el("code", {}, "${" + v + "}")])));
     }
+    if (r.unwrapped) {
+      const dropped = r.unwrapped.dropped || [];
+      items.push(el("div", { class: "notice" }, "Umbrella-chart values: rendered the contents of ",
+        el("code", {}, r.unwrapped.key + ":"), " (with top-level ", el("code", {}, "global"), " merged in)",
+        ...(dropped.length ? [". Ignored sibling keys: ", ...dropped.flatMap((k, i) => [i ? ", " : "", el("code", {}, k)])] : []),
+        "."));
+    }
+    if (r.filled_globals && r.filled_globals.length) {
+      items.push(el("div", { class: "notice" }, "Not set, so placeholders were used for rendering: ",
+        ...r.filled_globals.flatMap((k, i) => [i ? ", " : "", el("code", {}, "global." + k)]), "."));
+    }
     if (!r.provenance) items.push(el("div", { class: "notice" }, "Baseline render failed — chart/user colouring may be incomplete."));
   }
   host.replaceChildren(...items);

@@ -52,3 +52,15 @@ def test_chart_default_pipelines_reads_order(tmp_path):
         "        metrics: {}\n        traces: {}\n        logs: {}\nglobal: {domain: x}\n")
     assert chart_default_pipelines(tmp_path) == {"opentelemetry-agent": ["metrics", "traces", "logs"]}
     assert chart_default_pipelines(tmp_path / "missing") == {}
+
+
+def test_umbrella_values_are_unwrapped_before_render():
+    values = ("externalSecrets: {name: x}\n"
+              "otel-integration:\n  opentelemetry-agent:\n    config:\n      receivers:\n        filelog: {}\n")
+    seen = []
+    out = analyse(values, Path("."), renderer=lambda c, t: seen.append(t) or fake_renderer(c, t))
+    agent = out["collectors"][0]
+    assert agent["components"]["receivers"]["filelog"]["origin"] == "user"
+    assert out["unwrapped"] == {"key": "otel-integration", "dropped": ["externalSecrets"]}
+    assert out["filled_globals"] == ["domain", "clusterName"]
+    assert all("otel-integration" not in t and "DOMAIN_UNSET" in t for t in seen)

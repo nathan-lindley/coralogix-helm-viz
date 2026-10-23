@@ -41,6 +41,8 @@ Options: `--chart ./path/to/otel-integration` renders a local chart checkout. `-
 
 Expressions such as `{{ exec "secret-tool" ... }}` (helmfile or gomplate) are swapped for `TEMPLATED_n` placeholders so the file still parses. The tool lists each substitution. `${var}` and `${env:VAR}` are kept as literal text.
 
+Values written for an umbrella chart, with everything under an `otel-integration:` key, are unwrapped before rendering, and any top-level `global` is merged in. Other top-level keys are ignored, and the tool lists them. If `global.domain` or `global.clusterName` is missing, the tool uses `DOMAIN_UNSET` / `CLUSTER_UNSET` so the chart still renders.
+
 ## Layout
 
 ```

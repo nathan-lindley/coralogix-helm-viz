@@ -9,6 +9,7 @@ import yaml
 from . import helm
 from .analyze import build_model
 from .manifest import extract_collectors, strip_config_overrides
+from .normalise import normalise_values
 from .templating import neutralise
 
 MAX_VALUES_BYTES = 2 * 1024 * 1024
@@ -55,11 +56,14 @@ def analyse(values_text: str, chart_path: Path,
     if len(values_text.encode()) > MAX_VALUES_BYTES:
         raise InputError("values file is larger than 2 MiB")
     prepared = neutralise(values_text)
-    values = _parse_values(prepared.text)
+    shaped = normalise_values(_parse_values(prepared.text))
+    values = shaped.values
+    # Re-dumping loses comments, so only do it when the shape actually changed.
+    render_text = yaml.safe_dump(values, sort_keys=False) if shaped.changed else prepared.text
     baseline_text = yaml.safe_dump(strip_config_overrides(values), sort_keys=False)
 
     with ThreadPoolExecutor(max_workers=2) as pool:
-        real = pool.submit(renderer, chart_path, prepared.text)
+        real = pool.submit(renderer, chart_path, render_text)
         base = pool.submit(renderer, chart_path, baseline_text)
         manifest = real.result()
         try:
@@ -80,4 +84,6 @@ def analyse(values_text: str, chart_path: Path,
         "placeholders": [p.__dict__ for p in prepared.placeholders],
         "variables": prepared.variables,
         "provenance": baseline_manifest is not None,
+        "unwrapped": shaped.unwrapped,
+        "filled_globals": shaped.filled_globals,
     }
