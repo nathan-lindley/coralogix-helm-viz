@@ -73,7 +73,13 @@ const editor = (() => {
   }
   const cm = CodeMirror.fromTextArea(textarea, {
     mode: "yaml", lineNumbers: true, indentUnit: 2, tabSize: 2, lineWrapping: false,
-    extraKeys: { Tab: (c) => c.replaceSelection("  "), "Cmd-Enter": () => renderNow(), "Ctrl-Enter": () => renderNow() },
+    // YAML nests by indentation, so fold on that (addon may be missing if the CDN is down).
+    foldGutter: Boolean(CodeMirror.fold), foldOptions: { rangeFinder: CodeMirror.fold?.indent, widget: "…" },
+    gutters: ["CodeMirror-linenumbers", "CodeMirror-foldgutter"],
+    extraKeys: {
+      Tab: (c) => c.replaceSelection("  "), "Cmd-Enter": () => renderNow(), "Ctrl-Enter": () => renderNow(),
+      "Ctrl-Q": (c) => c.foldCode?.(c.getCursor()),
+    },
   });
   return {
     get: () => cm.getValue(), set: (v) => cm.setValue(v),

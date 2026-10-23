@@ -127,6 +127,10 @@ button:hover, .button:hover { filter: brightness(0.97); }
 .editor-host .CodeMirror { height: 100%; font: 12px/1.5 var(--mono); background: var(--panel); color: var(--text); }
 .CodeMirror-gutters { background: var(--panel-2); border-right: 1px solid var(--border); }
 .CodeMirror-linenumber { color: var(--muted); }
+.CodeMirror-foldgutter { width: 1em; }
+.CodeMirror-foldgutter-open, .CodeMirror-foldgutter-folded { color: var(--muted); cursor: pointer; }
+.CodeMirror-foldgutter-open:hover, .CodeMirror-foldgutter-folded:hover { color: var(--text); }
+.CodeMirror-foldmarker { color: var(--accent); text-shadow: none; font-family: inherit; padding: 0 4px; border-radius: 3px; background: color-mix(in srgb, var(--accent) 15%, transparent); }
 .CodeMirror-cursor { border-left-color: var(--text); }
 .CodeMirror-selected, .CodeMirror-focused .CodeMirror-selected { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 .cm-s-default .cm-atom { color: var(--accent); }
