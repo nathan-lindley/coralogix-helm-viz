@@ -79,6 +79,7 @@ const editor = (() => {
     extraKeys: {
       Tab: (c) => c.replaceSelection("  "), "Cmd-Enter": () => renderNow(), "Ctrl-Enter": () => renderNow(),
       "Ctrl-Q": (c) => c.foldCode?.(c.getCursor()),
+      "Cmd-/": (c) => c.toggleComment?.({ indent: true }), "Ctrl-/": (c) => c.toggleComment?.({ indent: true }),
     },
   });
   return {

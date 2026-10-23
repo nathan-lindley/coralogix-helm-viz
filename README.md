@@ -28,7 +28,7 @@ Options: `--chart ./path/to/otel-integration` renders a local chart checkout. `-
 
 ## What you get
 
-- **Foldable editor.** Collapse any YAML block from the ▾ in the gutter, or press Ctrl-Q on its line. "Show in values.yaml" opens any fold that hides the target line.
+- **Foldable editor.** Collapse any YAML block from the ▾ in the gutter, or press Ctrl-Q on its line. Cmd-/ (Ctrl-/ elsewhere) comments or uncomments the selected lines. "Show in values.yaml" opens any fold that hides the target line.
 - **Tabs for comparing.** Each tab has its own `values.yaml`, chart version, render and graph position. **Duplicate** a tab and pick another chart version to compare releases, or open several values files (each file opens in its own tab). Double-click a tab to rename it. Tabs are saved in your browser's local storage.
 - **Compare** diffs this tab against another tab (other → this). **Summary** lists added, removed and changed pipelines and components, including processor order changes and new or fixed problems; each changed component has an inline YAML diff. **Rendered config** is a unified diff of the effective collector config, so preset changes between chart versions show up. **values.yaml** diffs the inputs. **⇄ Swap** flips the direction.
 - **One tab per collector** (agent DaemonSet, cluster-collector Deployment, gateway, and so on), with error and warning badges.
